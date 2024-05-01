@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const multer = require('multer');
+
 const searchProducts = require('./searchProducts');
 const {createOrder, updateOrder, getOrderById, getAllOrders, deleteOrder, exportOrder} = require('./order');
 const { addItemToOrder, updateItemInOrder, deleteItemFromOrder } = require('./orderItems');
@@ -11,6 +12,7 @@ const { uploadFileToGCS } = require('./gcs');
 
 const app = express();
 const PORT = 3000;
+
 
 const multerStorage = multer.memoryStorage();
 
@@ -38,6 +40,7 @@ app.post('/import-products', upload.single('file'), async (req, res) => {
   try {
     const filePath = await uploadFileToGCS(req.file);
     const numImported = await importProducts(filePath);
+    
     res.status(200).send(`${numImported} products imported successfully.`);
   } catch (error) {
     res.status(500).send('Failed to import products: ' + error.message);

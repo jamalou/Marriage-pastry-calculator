@@ -2,6 +2,29 @@ const { Storage } = require('@google-cloud/storage');
 
 
 const storage = new Storage();
-const bucket = storage.bucket('demo_mohamed_jamel'); // Replace with your bucket name
+bucketName = 'demo_mohamed_jamel';
+const bucket = storage.bucket(bucketName); // Replace with your bucket name
 
-module.exports = bucket;
+async function uploadFileToGCS(file) {
+    const fileName = `data/product/imports/${Date.now()}-${file.originalname}`;
+    const fileUpload = bucket.file(fileName);
+  
+    const stream = fileUpload.createWriteStream({
+      metadata: {
+        contentType: file.mimetype
+      }
+    });
+  
+    stream.on('error', (e) => {
+      throw new Error('Something went wrong!');
+    });
+  
+    stream.end(file.buffer);
+  
+    return `https://storage.googleapis.com/${bucketName}/${fileName}`;
+  }
+
+module.exports = {
+    bucket,
+    uploadFileToGCS
+};

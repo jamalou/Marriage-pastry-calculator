@@ -9,28 +9,80 @@ const axios = require('axios');
 
 const storage = new Storage();
 
-function importProducts(filePath) {
+async function clearCollection(collectionPath) {
+  const dbRef = db.collection(collectionPath);
+  const batchSize = 200; // Firestore limit is 500 operations in a batch
+  const query = dbRef.limit(batchSize);
+
   return new Promise((resolve, reject) => {
-    const products = [];
-    fs.createReadStream(filePath)
-      .pipe(csv())
-      .on('data', (data) => products.push(data))
-      .on('end', async () => {
-        try {
-          const batch = db.batch();
-          products.forEach(product => {
-            const docRef = db.collection('products').doc(); // Create a new document for each product
-            batch.set(docRef, product);
-          });
-          await batch.commit();
-          resolve(products.length);
-        } catch (error) {
-          reject(error);
-        }
-      });
+    deleteQueryBatch(query, resolve).catch(reject);
   });
+
+  async function deleteQueryBatch(query, resolve) {
+    const snapshot = await query.get();
+
+    // When there are no documents left, we are done
+    if (snapshot.size === 0) {
+      resolve();
+      return;
+    }
+
+    // Delete documents in a batch
+    const batch = db.batch();
+    snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+
+    await batch.commit();
+
+    // Recurse on the next process tick, to avoid
+    // exploding the stack.
+    process.nextTick(() => {
+      deleteQueryBatch(query, resolve);
+    });
+  }
 }
 
+async function importProducts(fileUrl) {
+  const match = fileUrl.match(/https:\/\/storage\..+\.com\/([^\/]+)\/(.+)/);
+  if (!match) {
+    throw new Error('Invalid URL');
+  }
+
+  const bucketName = match[1];
+  const fileName = match[2];
+  const bucket = storage.bucket(bucketName);
+  const file = bucket.file(fileName);
+
+  console.log(`Downloading file from GCS bucket: ${bucketName}, file: ${fileName}`);
+  try {
+    
+    return new Promise(async (resolve, reject) => {
+
+      // First clear the existing products
+      await clearCollection('products');
+
+      const products = [];
+      file.createReadStream()
+        .pipe(csv())
+        .on('data', (data) => products.push(data))
+        .on('error', (error) => reject(error))
+        .on('end', async () => {
+          try {
+            const batch = db.batch();
+            products.forEach(product => {
+              const docRef = db.collection('products').doc(); // Create a new document for each product
+              batch.set(docRef, product);
+            });
+            await batch.commit();
+            resolve(products.length);
+          } catch (error) {
+            reject(error);
+          }
+        });
+    });
+  } catch (error) {
+    throw new Error(`Failed to clear the collection or import products: ${error.message}`);
+  }
+}
 
 const listProducts = async (req, res) => {
     try {

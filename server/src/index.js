@@ -1,22 +1,43 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const multer = require('multer');
 const searchProducts = require('./searchProducts');
 const {createOrder, updateOrder, getOrderById, getAllOrders, deleteOrder, exportOrder} = require('./order');
 const { addItemToOrder, updateItemInOrder, deleteItemFromOrder } = require('./orderItems');
 const { importProducts, listProducts, updateProduct, exportProducts } = require('./products');
-const { uploadImage, processImage } = require('./uploadImage');;
+const { uploadImage, processImage } = require('./uploadImage');
+const { uploadFileToGCS } = require('./gcs');
 
 const app = express();
 const PORT = 3000;
 
+const multerStorage = multer.memoryStorage();
+
+const upload = multer({
+  storage: multerStorage,
+  fileFilter: (req, file, cb) => {
+    // Check if the uploaded file is a CSV
+    if (file.mimetype === 'text/csv' || file.mimetype === 'application/vnd.ms-excel') {
+      cb(null, true); // Accept the file
+    } else {
+      // If the file is not CSV, reject it and send an error message
+      cb(new Error('Only CSV files are allowed!'), false);
+    }
+  }
+});
+
 app.use(bodyParser.json());
 app.use(cors());
 
+app.post('/import-products', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).send('No file uploaded.');
+  }
 
-app.post('/import-products', async (req, res) => {
   try {
-    const numImported = await importProducts(req.body.filePath);
+    const filePath = await uploadFileToGCS(req.file);
+    const numImported = await importProducts(filePath);
     res.status(200).send(`${numImported} products imported successfully.`);
   } catch (error) {
     res.status(500).send('Failed to import products: ' + error.message);

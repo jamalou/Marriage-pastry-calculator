@@ -1,7 +1,13 @@
-const db = require('./firestore');
-const bucket = require('./gcs');
 const multer = require('multer');
 const sharp = require('sharp');
+
+const db = require('./firestore');
+const { Storage } = require('@google-cloud/storage');
+
+const storage = new Storage();
+
+bucketName = 'demo_mohamed_jamel';
+const bucket = storage.bucket(bucketName);
 
 // Configure multer for memory storage (to process the file in memory)
 const multerStorage = multer.memoryStorage();
@@ -48,7 +54,7 @@ const processImage = async (req, res) => {
       metadata: { contentType: 'image/jpeg' }
     });
 
-    const url = `https://storage.googleapis.com/${bucket.name}/${filePath}`;
+    const url = `https://storage.cloud.google.com/${bucket.name}/${filePath}`;
 
     // Update Firestore with the new image URL
     await productRef.update({ picture_url: url });

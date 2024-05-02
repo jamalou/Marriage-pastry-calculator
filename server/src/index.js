@@ -3,10 +3,9 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const multer = require('multer');
 
-const searchProducts = require('./searchProducts');
-const {createOrder, updateOrder, getOrderById, getAllOrders, deleteOrder, exportOrder} = require('./order');
+const { createOrder, updateOrder, getOrderById, getAllOrders, getOrderItem, getOrderItems, deleteOrder, exportOrder } = require('./order');
 const { addItemToOrder, updateItemInOrder, deleteItemFromOrder } = require('./orderItems');
-const { importProducts, listProducts, updateProduct, exportProducts } = require('./products');
+const { importProducts, listProducts, updateProduct, deleteProduct, searchProducts, exportProducts } = require('./products');
 const { uploadImage, processImage } = require('./uploadImage');
 const { uploadFileToGCS } = require('./gcs');
 
@@ -53,6 +52,21 @@ app.get('/list-products', listProducts);
 app.patch('/update-product/:productId', updateProduct);
 // Export all products to an Excel file
 app.get('/export-products', exportProducts);
+
+// DELETE endpoint to remove a product by ID
+app.delete('/products/:productId', async (req, res) => {
+  try {
+      const productId = req.params.productId;
+      const result = await deleteProduct(productId);
+      res.status(200).send(result);
+  } catch (error) {
+      if (error.message === 'Product not found') {
+          res.status(404).send({ error: error.message });
+      } else {
+          res.status(500).send({ error: 'Failed to delete the product' });
+      }
+  }
+});
 
 // Search for products by name
 app.get('/search', async (req, res) => {
@@ -102,14 +116,19 @@ app.patch('/update-order/:orderId', async (req, res) => {
   }
 });
 
-// Endpoint to add an item to an order
-app.post('/orders/:orderId/items', async (req, res) => {
-    try {
-        const itemId = await addItemToOrder(req.params.orderId, req.body);
-        res.status(201).send(`Item added successfully with ID: ${itemId}`);
-    } catch (error) {
-        res.status(500).send(`Error adding item to order: ${error.message}`);
-    }
+// Endpoint to add an item to an order based on the product ID and provided weight or number of pieces
+app.post('/orders/:orderId/items/:productId', async (req, res) => {
+  try {
+      const { orderId, productId } = req.params;
+      const itemData = {
+          productId,
+          ...req.body
+      };
+      const itemId = await addItemToOrder(orderId, itemData);
+      res.status(201).send(`Item added successfully with ID: ${itemId}`);
+  } catch (error) {
+      res.status(500).send(`Error adding item to order: ${error.message}`);
+  }
 });
 
 // Endpoint to update an item in an order
@@ -125,6 +144,29 @@ app.patch('/update-order-item/:orderId/:itemId', async (req, res) => {
   }
 });
 
+// get order's items (if itemId is passed, get that specific item)
+app.get('/orders/:orderId/items/:itemId?', async (req, res) => {
+  try {
+      const { orderId, itemId } = req.params;
+      // Check if an item ID was provided
+      if (itemId) {
+          // Get a specific item from the order
+          const item = await getOrderItem(orderId, itemId);
+          res.status(200).json(item);
+      } else {
+          // Get all items from the order
+          const items = await getOrderItems(orderId);
+          res.status(200).json(items);
+      }
+  } catch (error) {
+      if (error.message === 'Item not found') {
+          res.status(404).send({ error: error.message });
+      } else {
+          res.status(500).send({ error: error.message });
+      }
+  }
+});
+
 // Endpoint to delete an item from an order
 app.delete('/orders/:orderId/items/:itemId', async (req, res) => {
     try {
@@ -134,7 +176,6 @@ app.delete('/orders/:orderId/items/:itemId', async (req, res) => {
         res.status(500).send(`Error deleting item from order: ${error.message}`);
     }
 });
-
 
 app.post('/upload-image/:productId', uploadImage, processImage);
 

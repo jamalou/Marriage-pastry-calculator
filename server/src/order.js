@@ -4,8 +4,7 @@ const { downloadImageFromGCS } = require('./products');
 
 async function createOrder(orderData) {
   const orderRef = db.collection('orders').doc(); // creates a new document in the 'orders' collection
-  await orderRef.set(orderData);
-  await orderRef.update({ total_price: parseFloat(0.0) });
+  await orderRef.set({ total_price: parseFloat(0.0), total_number_of_pieces: parseInt(0), ...orderData });
   return orderRef.id; // returns the new order ID
 }
 
@@ -13,43 +12,115 @@ async function getAllOrders() {
   const orderRef = db.collection('orders');
   const snapshot = await orderRef.get();
   const orders = [];
-  snapshot.forEach(doc => {
-    orders.push({ id: doc.id, ...doc.data() });
-  });
+
+  for (const doc of snapshot.docs) {
+    await computeOrderGlobals(doc.id);
+    const orderData = { id: doc.id, ...doc.data() };
+    orders.push(orderData);
+  }
+
   return orders;
 }
 
 async function getOrderById(orderId) {
   const orderRef = db.collection('orders').doc(orderId);
-  await getOrderPrice(orderId);
+  await computeOrderGlobals(orderId);
   const doc = await orderRef.get();
   if (!doc.exists) {
     throw new Error('No order found with the given ID.');
   }
-  return doc.data();
+  // Fetch the items within this order
+  const itemsCollection = orderRef.collection('items');
+  const itemsSnapshot = await itemsCollection.get();
+  const items = [];
+  
+  itemsSnapshot.forEach(itemDoc => {
+      items.push({ id: itemDoc.id, ...itemDoc.data() });
+  });
+  
+  return { id: doc.id, ...doc.data(), items: items };
 }
 
-async function getOrderPrice(orderId) {
+async function computeOrderGlobals(orderId) {
   const orderRef = db.collection('orders').doc(orderId);
   const doc = await orderRef.get();
   if (!doc.exists) {
     throw new Error('No order found with the given ID.');
   }
   const itemsSnapshot = await orderRef.collection('items').get();
-  let orderTotalPrice = 0;
+  let orderTotalPrice = 0.0;
+  let totalNumberOfPieces = 0;  // Initialize total number of pieces
+  let totalWeight = 0.0;
+
   itemsSnapshot.forEach(doc => {
-      if (doc.data().total_price) {
-          orderTotalPrice += parseFloat(doc.data().total_price);
-      }
+    const itemData = doc.data();
+    if (itemData.total_price) {
+      orderTotalPrice += parseFloat(itemData.total_price);
+    }
+    if (itemData.number_of_pieces) {
+      totalNumberOfPieces += parseInt(itemData.number_of_pieces);
+    }
+    if (itemData.weight) {
+      totalWeight += parseFloat(itemData.weight);
+    }
   });
-  await orderRef.update({ total_price: parseFloat(orderTotalPrice.toFixed(2)) });
-  return orderTotalPrice;
+
+  // Update the order with the new total price and total number of pieces
+  await orderRef.update({
+    total_price: parseFloat(orderTotalPrice.toFixed(2)),
+    total_number_of_pieces: totalNumberOfPieces,  // Update the total number of pieces
+    totalWeight: parseFloat(totalWeight.toFixed(2))
+  });
+
+  return {
+    total_price: orderTotalPrice,
+    total_number_of_pieces: totalNumberOfPieces,
+    totalWeight: totalWeight
+  };
+}
+
+
+async function getOrderItems(orderId) {
+  const itemsRef = db.collection('orders').doc(orderId).collection('items');
+  const snapshot = await itemsRef.get();
+  const items = [];
+
+  snapshot.forEach(doc => {
+      items.push({ id: doc.id, ...doc.data() });
+  });
+
+  return items;
+}
+
+async function getOrderItem(orderId, itemId) {
+  const itemRef = db.collection('orders').doc(orderId).collection('items').doc(itemId);
+  const doc = await itemRef.get();
+  if (!doc.exists) {
+      throw new Error('Item not found');
+  }
+  return { id: doc.id, ...doc.data() };
 }
 
 async function updateOrder(orderId, updatedData) {
   const orderRef = db.collection('orders').doc(orderId);
-  await orderRef.update(updatedData);
-  await getOrderPrice(orderId);
+
+  // Prepare updated data with nested fields addressed via dot notation
+  const updatePayload = {};
+  for (const key in updatedData) {
+    if (updatedData.hasOwnProperty(key) && typeof updatedData[key] === 'object' && !Array.isArray(updatedData[key])) {
+      for (const subKey in updatedData[key]) {
+        if (updatedData[key].hasOwnProperty(subKey)) {
+          updatePayload[`${key}.${subKey}`] = updatedData[key][subKey];
+        }
+      }
+    } else {
+      updatePayload[key] = updatedData[key];
+    }
+  }
+
+  // Update the order with the constructed payload
+  await orderRef.update(updatePayload);
+  await computeOrderGlobals(orderId);
   return orderId; // returns the updated order ID
 }
 
@@ -87,7 +158,7 @@ async function exportOrder(req, res) {
     // Fetch order details from Firestore
     const orderId = req.params.orderId; // Get the order ID from URL or request body
     // compute the order price to be sure that it is up to date
-    await getOrderPrice(orderId);
+    await computeOrderGlobals(orderId);
     const orderRef = db.collection('orders').doc(orderId);
     const orderDoc = await orderRef.get();
     const orderData = orderDoc.data();
@@ -143,8 +214,8 @@ async function exportOrder(req, res) {
       const item = doc.data();
       const row = worksheet.getRow(rowIndex);
       row.getCell(2).value = item.product_name;
-      row.getCell(3).value = item.number_of_pieces;
-      row.getCell(4).value = item.pieces_per_kilo;
+      row.getCell(3).value = parseInt(item.number_of_pieces);
+      row.getCell(4).value = parseInt(item.pieces_per_kilo);
       row.getCell(5).value = item.price;
       row.getCell(6).value = item.weight;
       row.getCell(7).value = item.total_price;
@@ -166,8 +237,18 @@ async function exportOrder(req, res) {
       rowIndex++;
     }
 
+    const totalWeight = rowIndex + 2;
+    worksheet.getCell(`B${totalWeight}`).value = `Poid Total:`;
+    worksheet.getCell(`B${totalWeight}`).font = { bold: true };
+    worksheet.getCell(`C${totalWeight}`).value = orderData.total_number_of_pieces;
+
+    const totalPieces = rowIndex + 3;
+    worksheet.getCell(`B${totalPieces}`).value = `Nombre de pièces total:`;
+    worksheet.getCell(`B${totalPieces}`).font = { bold: true };
+    worksheet.getCell(`C${totalPieces}`).value = orderData.total_number_of_pieces;
+
     // Add Order Total Price at the end
-    const totalPriceRow = rowIndex + 2;
+    const totalPriceRow = rowIndex + 4;
     worksheet.getCell(`B${totalPriceRow}`).value = `Prix total de la commande:`;
     worksheet.getCell(`B${totalPriceRow}`).font = { bold: true };
     worksheet.getCell(`C${totalPriceRow}`).value = orderData.total_price;
@@ -189,6 +270,8 @@ module.exports = {
   updateOrder,
   deleteOrder,
   exportOrder,
-  getOrderPrice
+  computeOrderGlobals,
+  getOrderItem,
+  getOrderItems
 };
 // http://localhost:3000/export-order/bfyQjiV29KfGDVg7q4sh

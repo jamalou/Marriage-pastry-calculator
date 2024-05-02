@@ -4,7 +4,7 @@ const { Storage } = require('@google-cloud/storage');
 const storage = new Storage();
 
 bucketName = 'demo_mohamed_jamel';
-const bucket = storage.bucket(bucketName); // Replace with your bucket name
+const bucket = storage.bucket(bucketName);
 
 async function uploadFileToGCS(file) {
     const fileName = `data/product/imports/${Date.now()}-${file.originalname}`;

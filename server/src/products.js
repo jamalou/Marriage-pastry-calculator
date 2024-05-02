@@ -52,14 +52,13 @@ async function importProducts(fileUrl) {
   const bucket = storage.bucket(bucketName);
   const file = bucket.file(fileName);
 
-  console.log(`Downloading file from GCS bucket: ${bucketName}, file: ${fileName}`);
   try {
     
     return new Promise(async (resolve, reject) => {
 
       // First clear the existing products
       await clearCollection('products');
-
+      console.log(`Downloading file from GCS bucket: ${bucketName}, file: ${fileName}`);
       const products = [];
       file.createReadStream()
         .pipe(csv())
@@ -108,6 +107,21 @@ const updateProduct = async (req, res) => {
         res.status(500).send({ status: 'Error', message: error.message });
     }
 };
+
+// Function to delete a product by ID
+async function deleteProduct(productId) {
+  const productRef = db.collection('products').doc(productId);
+
+  // Check if the product actually exists
+  const doc = await productRef.get();
+  if (!doc.exists) {
+      throw new Error('Product not found');
+  }
+
+  // If the product exists, delete it
+  await productRef.delete();
+  return { message: `Product with ID ${productId} deleted successfully.` };
+}
 
 // Helper function to download image
 async function downloadImageFromGCS(gcsUrl) {
@@ -201,11 +215,32 @@ const exportProducts = async (req, res) => {
   }
 };
 
+async function searchProducts(query) {
+  const productsRef = db.collection('products');
+  const snapshot = await productsRef.get(); // Get all products
+  const products = [];
+
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    if (data.product_name && data.product_name.toLowerCase().includes(query.toLowerCase())) {
+      // Include the document ID with the product's data
+      products.push({
+        id: doc.id,  // This is how you get the document's ID
+        ...data     // Spread operator to include all data fields of the document
+      });
+    }
+  });
+
+  return products;
+}
+
 
 module.exports = {
     importProducts,
     listProducts,
     updateProduct,
     exportProducts,
-    downloadImageFromGCS
+    downloadImageFromGCS,
+    searchProducts,
+    deleteProduct
 };

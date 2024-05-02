@@ -1,25 +1,25 @@
 const db = require('./firestore');
-const { getOrderPrice } = require('./order');
+const { computeOrderGlobals } = require('./order');
 
-// Helper function to fetch product details
-async function fetchProductDetails(productName) {
-    const productRef = db.collection('products').where('product_name', '==', productName).limit(1);
-    const snapshot = await productRef.get();
-    if (snapshot.empty) {
-        throw new Error('Product not found');
+// Fetch product details using the productId
+async function fetchProductDetails(productId) {
+    const productRef = db.collection('products').doc(productId);
+    const doc = await productRef.get();
+
+    if (!doc.exists) {
+        console.log('No such product!');
+        return null; // Or handle this as an error as appropriate
+    } else {
+        return doc.data(); // Return the product details
     }
-    return snapshot.docs[0].data(); // Assuming the product exists and is unique
 }
 
 // Add an item to an order
 async function addItemToOrder(orderId, itemData) {
     const orderRef = db.collection('orders').doc(orderId);
     const itemRef = orderRef.collection('items').doc(); // Create a new document for the item
-
-    const productDetails = await fetchProductDetails(itemData.product_name);
-    itemData.pieces_per_kilo = productDetails.pieces_per_kilo;
-    itemData.price = productDetails.price;
-    itemData.picture_url = productDetails.picture_url;
+    const productDetails = await fetchProductDetails(itemData.productId);
+    
     // Check if productDetails and required properties are available and valid
     if (
         !productDetails
@@ -35,6 +35,11 @@ async function addItemToOrder(orderId, itemData) {
             throw new Error('Invalid price');
         }
     }
+
+    itemData.pieces_per_kilo = productDetails.pieces_per_kilo;
+    itemData.price = productDetails.price;
+    itemData.picture_url = productDetails.picture_url;
+    itemData.product_name = productDetails.product_name;
 
     if (itemData.number_of_pieces && !isNaN(itemData.number_of_pieces)) {
         const numPieces = parseInt(itemData.number_of_pieces);
@@ -68,7 +73,7 @@ async function addItemToOrder(orderId, itemData) {
     await itemRef.set(itemData);
 
     // Update the order total price
-    await getOrderPrice(orderId);
+    await computeOrderGlobals(orderId);
 
     return itemRef.id;
 }
@@ -118,7 +123,7 @@ async function updateItemInOrder(orderId, itemId, updateData) {
         console.log('Item updated successfully:', itemId);
 
         // Update the order total price
-        await getOrderPrice(orderId);
+        await computeOrderGlobals(orderId);
         
     } catch (error) {
         console.error('Failed to update item:', error);
@@ -130,7 +135,7 @@ async function updateItemInOrder(orderId, itemId, updateData) {
 async function deleteItemFromOrder(orderId, itemId) {
     const itemRef = db.collection('orders').doc(orderId).collection('items').doc(itemId);
     await itemRef.delete();
-    await getOrderPrice(orderId);
+    await computeOrderGlobals(orderId);
     return itemId;
 }
 

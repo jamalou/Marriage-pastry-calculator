@@ -2,16 +2,17 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const multer = require('multer');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
 const { createOrder, updateOrder, getOrderById, getAllOrders, getOrderItem, getOrderItems, deleteOrder, exportOrder } = require('./order');
 const { addItemToOrder, updateItemInOrder, deleteItemFromOrder } = require('./orderItems');
 const { importProducts, listProducts, updateProduct, deleteProduct, searchProducts, exportProducts } = require('./products');
 const { uploadImage, processImage } = require('./uploadImage');
 const { uploadFileToGCS } = require('./gcs');
+const db = require('./firestore');
 
 const app = express();
-const PORT = 3000;
-
 
 const multerStorage = multer.memoryStorage();
 
@@ -31,7 +32,51 @@ const upload = multer({
 app.use(bodyParser.json());
 app.use(cors());
 
-app.post('/import-products', upload.single('file'), async (req, res) => {
+// asdfasfa
+
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  console.log(username, password)
+  try {
+      const usersRef = db.collection('users');
+      const snapshot = await usersRef.where('user_name', '==', username).get();
+      if (snapshot.empty) {
+          console.log('No user found with that username.');
+          return res.status(401).json({ error: "User does not exist" });
+      }
+
+      const userDoc = snapshot.docs[0]; // Assuming username is unique and only taking the first document
+      const user = userDoc.data();
+      console.log(user)
+      const passwordMatch = await bcrypt.compare(password, user.password_hash);
+      if (passwordMatch) {
+          console.log("password mathched")
+          const token = jwt.sign({ userId: userDoc.id }, 'your_secret_key', { expiresIn: '1h' });
+          const refreshToken = jwt.sign({ userId: userDoc.id }, 'your_refresh_secret_key', { expiresIn: '24h' });
+          res.json({ accessToken: token, refreshToken: refreshToken });
+      } else {
+          return res.status(401).json({ error: "Invalid credentials" });
+      }
+  } catch (error) {
+      console.error('Error accessing Firestore or other internal error:', error);
+      return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Middleware to validate JWT
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (token == null) return res.sendStatus(401);
+  jwt.verify(token, 'your_secret_key', (err, user) => {
+      if (err) return res.sendStatus(403);
+      req.user = user;
+      next();
+  });
+}
+
+// import csv products file
+app.post('/import-products', authenticateToken, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).send('No file uploaded.');
   }
@@ -47,14 +92,14 @@ app.post('/import-products', upload.single('file'), async (req, res) => {
 });
 
 // List all products 
-app.get('/list-products', listProducts);
+app.get('/list-products', authenticateToken, listProducts);
 // Update a product by ID
-app.patch('/update-product/:productId', updateProduct);
+app.patch('/update-product/:productId', authenticateToken, updateProduct);
 // Export all products to an Excel file
-app.get('/export-products', exportProducts);
+app.get('/export-products', authenticateToken, exportProducts);
 
 // DELETE endpoint to remove a product by ID
-app.delete('/products/:productId', async (req, res) => {
+app.delete('/products/:productId', authenticateToken, async (req, res) => {
   try {
       const productId = req.params.productId;
       const result = await deleteProduct(productId);
@@ -69,7 +114,7 @@ app.delete('/products/:productId', async (req, res) => {
 });
 
 // Search for products by name
-app.get('/search', async (req, res) => {
+app.get('/search', authenticateToken, async (req, res) => {
   try {
     const results = await searchProducts(req.query.term);
     res.json(results);
@@ -79,7 +124,7 @@ app.get('/search', async (req, res) => {
 });
 
 // Create a new order
-app.post('/create-order', async (req, res) => {
+app.post('/create-order', authenticateToken, async (req, res) => {
   try {
     const orderId = await createOrder(req.body);
     res.status(201).send(`Order created successfully with ID: ${orderId}`);
@@ -88,10 +133,10 @@ app.post('/create-order', async (req, res) => {
   }
 });
 // delete an order by ID
-app.delete('/delete-order/:orderId', deleteOrder);
+app.delete('/delete-order/:orderId', authenticateToken, deleteOrder);
 
 // Fetch a single order by ID or all orders if no ID is provided
-app.get('/get-order/:orderId?', async (req, res) => {
+app.get('/get-order/:orderId?', authenticateToken, async (req, res) => {
   try {
     if (req.params.orderId) {
       const order = await getOrderById(req.params.orderId);
@@ -106,7 +151,7 @@ app.get('/get-order/:orderId?', async (req, res) => {
 });
 
 // Update an order by ID
-app.patch('/update-order/:orderId', async (req, res) => {
+app.patch('/update-order/:orderId', authenticateToken, async (req, res) => {
   try {
     const orderId = req.params.orderId;
     await updateOrder(orderId, req.body);
@@ -117,7 +162,7 @@ app.patch('/update-order/:orderId', async (req, res) => {
 });
 
 // Endpoint to add an item to an order based on the product ID and provided weight or number of pieces
-app.post('/orders/:orderId/items/:productId', async (req, res) => {
+app.post('/orders/:orderId/items/:productId', authenticateToken, async (req, res) => {
   try {
       const { orderId, productId } = req.params;
       const itemData = {
@@ -133,7 +178,7 @@ app.post('/orders/:orderId/items/:productId', async (req, res) => {
 
 // Endpoint to update an item in an order
 // Define the endpoint for updating an order item
-app.patch('/update-order-item/:orderId/:itemId', async (req, res) => {
+app.patch('/update-order-item/:orderId/:itemId', authenticateToken, async (req, res) => {
   const { orderId, itemId } = req.params;
   const updateData = req.body;
   try {
@@ -145,7 +190,7 @@ app.patch('/update-order-item/:orderId/:itemId', async (req, res) => {
 });
 
 // get order's items (if itemId is passed, get that specific item)
-app.get('/orders/:orderId/items/:itemId?', async (req, res) => {
+app.get('/orders/:orderId/items/:itemId?', authenticateToken, async (req, res) => {
   try {
       const { orderId, itemId } = req.params;
       // Check if an item ID was provided
@@ -168,7 +213,7 @@ app.get('/orders/:orderId/items/:itemId?', async (req, res) => {
 });
 
 // Endpoint to delete an item from an order
-app.delete('/orders/:orderId/items/:itemId', async (req, res) => {
+app.delete('/orders/:orderId/items/:itemId', authenticateToken, async (req, res) => {
     try {
         const itemId = await deleteItemFromOrder(req.params.orderId, req.params.itemId);
         res.status(200).send(`Item deleted successfully with ID: ${itemId}`);
@@ -177,12 +222,14 @@ app.delete('/orders/:orderId/items/:itemId', async (req, res) => {
     }
 });
 
-app.post('/upload-image/:productId', uploadImage, processImage);
+app.post('/upload-image/:productId', authenticateToken, uploadImage, processImage);
 
 // Define the endpoint for exporting order items to Excel
-app.get('/export-order/:orderId', (req, res) => {
+app.get('/export-order/:orderId', authenticateToken, (req, res) => {
   exportOrder(req, res);
 });
+
+const PORT = 3000;
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

@@ -40,6 +40,7 @@ async function addItemToOrder(orderId, itemData) {
     itemData.price = productDetails.price;
     itemData.picture_url = productDetails.picture_url;
     itemData.product_name = productDetails.product_name;
+    itemData.creation_date = new Date().toISOString();
 
     if (itemData.number_of_pieces && !isNaN(itemData.number_of_pieces)) {
         const numPieces = parseInt(itemData.number_of_pieces);

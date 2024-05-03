@@ -10,7 +10,7 @@ async function uploadFileToGCS(file) {
     const fileName = `data/product/imports/${Date.now()}-${file.originalname}`;
     const fileUpload = bucket.file(fileName);
   
-    const stream = fileUpload.createWriteStream({
+    const stream = await fileUpload.createWriteStream({
       metadata: {
         contentType: file.mimetype
       }
@@ -21,7 +21,6 @@ async function uploadFileToGCS(file) {
     });
   
     stream.end(file.buffer);
-  
     return `https://storage.googleapis.com/${bucketName}/${fileName}`;
   }
 

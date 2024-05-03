@@ -4,7 +4,11 @@ const { downloadImageFromGCS } = require('./products');
 
 async function createOrder(orderData) {
   const orderRef = db.collection('orders').doc(); // creates a new document in the 'orders' collection
-  await orderRef.set({ total_price: parseFloat(0.0), total_number_of_pieces: parseInt(0), ...orderData });
+  await orderRef.set({
+    total_price: parseFloat(0.0),
+    total_number_of_pieces: parseInt(0),
+    creation_date: new Date().toISOString(),
+    ...orderData });
   return orderRef.id; // returns the new order ID
 }
 

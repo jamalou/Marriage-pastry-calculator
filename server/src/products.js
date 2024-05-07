@@ -83,6 +83,17 @@ async function importProducts(fileUrl) {
   }
 }
 
+const addProduct = async (req, res) => {
+  const newProduct = req.body;
+  try {
+      // Add a new document with a generated ID
+      const docRef = await db.collection('products').add(newProduct);
+      res.status(201).send({ status: 'Success', message: 'Product added successfully', id: docRef.id });
+  } catch (error) {
+      res.status(500).send({ status: 'Error', message: error.message });
+  }
+};
+
 const listProducts = async (req, res) => {
     try {
         const productsRef = db.collection('products');
@@ -102,7 +113,7 @@ const updateProduct = async (req, res) => {
     const updates = req.body;
     try {
         await db.collection('products').doc(productId).update(updates);
-        res.status(200).send({ status: 'Success', message: 'Product updated successfully' });
+        res.status(200).send({ status: 'Success', message: 'Product updated successfully', id: productId });
     } catch (error) {
         res.status(500).send({ status: 'Error', message: error.message });
     }
@@ -237,6 +248,7 @@ async function searchProducts(query) {
 
 module.exports = {
     importProducts,
+    addProduct,
     listProducts,
     updateProduct,
     exportProducts,

@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 
 const { createOrder, updateOrder, getOrderById, getAllOrders, getOrderItem, getOrderItems, deleteOrder, exportOrder } = require('./order');
 const { addItemToOrder, updateItemInOrder, deleteItemFromOrder } = require('./orderItems');
-const { importProducts, listProducts, updateProduct, deleteProduct, searchProducts, exportProducts } = require('./products');
+const { importProducts, addProduct, listProducts, updateProduct, deleteProduct, searchProducts, exportProducts } = require('./products');
 const { uploadImage, processImage } = require('./uploadImage');
 const { uploadFileToGCS } = require('./gcs');
 const db = require('./firestore');
@@ -76,11 +76,10 @@ function authenticateToken(req, res, next) {
 }
 
 // import csv products file
-app.post('/import-products', authenticateToken, upload.single('file'), async (req, res) => {
+app.post('/products/csv', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).send('No file uploaded.');
   }
-
   try {
     const filePath = await uploadFileToGCS(req.file);
     const numImported = await importProducts(filePath);
@@ -92,14 +91,16 @@ app.post('/import-products', authenticateToken, upload.single('file'), async (re
 });
 
 // List all products 
-app.get('/list-products', authenticateToken, listProducts);
+app.get('/products', listProducts);
+
+// Route to add a new product
+app.post('/products', addProduct);
+
 // Update a product by ID
-app.patch('/update-product/:productId', authenticateToken, updateProduct);
-// Export all products to an Excel file
-app.get('/export-products', authenticateToken, exportProducts);
+app.patch('/products/:productId', updateProduct);
 
 // DELETE endpoint to remove a product by ID
-app.delete('/products/:productId', authenticateToken, async (req, res) => {
+app.delete('/products/:productId', async (req, res) => {
   try {
       const productId = req.params.productId;
       const result = await deleteProduct(productId);
@@ -113,8 +114,14 @@ app.delete('/products/:productId', authenticateToken, async (req, res) => {
   }
 });
 
+// Export all products to an Excel file
+app.get('/products/excel', exportProducts);
+
+// upload an image for a specific order
+app.post('/products/upload-image/:productId', uploadImage, processImage);
+
 // Search for products by name
-app.get('/search', authenticateToken, async (req, res) => {
+app.get('/search', async (req, res) => {
   try {
     const results = await searchProducts(req.query.term);
     res.json(results);
@@ -124,7 +131,7 @@ app.get('/search', authenticateToken, async (req, res) => {
 });
 
 // Create a new order
-app.post('/create-order', authenticateToken, async (req, res) => {
+app.post('/orders', async (req, res) => {
   try {
     const orderId = await createOrder(req.body);
     res.status(201).send(`Order created successfully with ID: ${orderId}`);
@@ -133,10 +140,10 @@ app.post('/create-order', authenticateToken, async (req, res) => {
   }
 });
 // delete an order by ID
-app.delete('/delete-order/:orderId', authenticateToken, deleteOrder);
+app.delete('/orders/:orderId', deleteOrder);
 
 // Fetch a single order by ID or all orders if no ID is provided
-app.get('/get-order/:orderId?', authenticateToken, async (req, res) => {
+app.get('/orders/:orderId?', async (req, res) => {
   try {
     if (req.params.orderId) {
       const order = await getOrderById(req.params.orderId);
@@ -151,7 +158,7 @@ app.get('/get-order/:orderId?', authenticateToken, async (req, res) => {
 });
 
 // Update an order by ID
-app.patch('/update-order/:orderId', authenticateToken, async (req, res) => {
+app.patch('/orders/:orderId', async (req, res) => {
   try {
     const orderId = req.params.orderId;
     await updateOrder(orderId, req.body);
@@ -162,7 +169,7 @@ app.patch('/update-order/:orderId', authenticateToken, async (req, res) => {
 });
 
 // Endpoint to add an item to an order based on the product ID and provided weight or number of pieces
-app.post('/orders/:orderId/items/:productId', authenticateToken, async (req, res) => {
+app.post('/orders/:orderId/items/:productId', async (req, res) => {
   try {
       const { orderId, productId } = req.params;
       const itemData = {
@@ -178,7 +185,7 @@ app.post('/orders/:orderId/items/:productId', authenticateToken, async (req, res
 
 // Endpoint to update an item in an order
 // Define the endpoint for updating an order item
-app.patch('/update-order-item/:orderId/:itemId', authenticateToken, async (req, res) => {
+app.patch('/orders/:orderId/items/:itemId', async (req, res) => {
   const { orderId, itemId } = req.params;
   const updateData = req.body;
   try {
@@ -190,7 +197,7 @@ app.patch('/update-order-item/:orderId/:itemId', authenticateToken, async (req, 
 });
 
 // get order's items (if itemId is passed, get that specific item)
-app.get('/orders/:orderId/items/:itemId?', authenticateToken, async (req, res) => {
+app.get('/orders/:orderId/items/:itemId?', async (req, res) => {
   try {
       const { orderId, itemId } = req.params;
       // Check if an item ID was provided
@@ -213,7 +220,7 @@ app.get('/orders/:orderId/items/:itemId?', authenticateToken, async (req, res) =
 });
 
 // Endpoint to delete an item from an order
-app.delete('/orders/:orderId/items/:itemId', authenticateToken, async (req, res) => {
+app.delete('/orders/:orderId/items/:itemId', async (req, res) => {
     try {
         const itemId = await deleteItemFromOrder(req.params.orderId, req.params.itemId);
         res.status(200).send(`Item deleted successfully with ID: ${itemId}`);
@@ -222,10 +229,8 @@ app.delete('/orders/:orderId/items/:itemId', authenticateToken, async (req, res)
     }
 });
 
-app.post('/upload-image/:productId', authenticateToken, uploadImage, processImage);
-
 // Define the endpoint for exporting order items to Excel
-app.get('/export-order/:orderId', authenticateToken, (req, res) => {
+app.get('/orders/export-excel/:orderId', (req, res) => {
   exportOrder(req, res);
 });
 

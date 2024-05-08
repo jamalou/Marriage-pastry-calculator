@@ -131,7 +131,7 @@ async function deleteProduct(productId) {
 
   // If the product exists, delete it
   await productRef.delete();
-  return { message: `Product with ID ${productId} deleted successfully.` };
+  return { message: `Product with ID ${productId} deleted successfully.`, id: productId };
 }
 
 // Helper function to download image

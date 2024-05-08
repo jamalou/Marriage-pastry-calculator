@@ -133,10 +133,15 @@ app.get('/search', async (req, res) => {
 // Create a new order
 app.post('/orders', async (req, res) => {
   try {
-    const orderId = await createOrder(req.body);
-    res.status(201).send(`Order created successfully with ID: ${orderId}`);
+    const orderData = req.body
+    const order = await createOrder(orderData);
+    res.status(201).send({
+      status: 'Success',
+      message: `Order created successfully with ID: ${order.id}`,
+      order: order
+    });
   } catch (error) {
-    res.status(500).send(`Error creating order: ${error.message}`);
+    res.status(500).send({message: `Error creating order: ${error.message}`});
   }
 });
 // delete an order by ID
@@ -161,23 +166,31 @@ app.get('/orders/:orderId?', async (req, res) => {
 app.patch('/orders/:orderId', async (req, res) => {
   try {
     const orderId = req.params.orderId;
-    await updateOrder(orderId, req.body);
-    res.status(200).send(`Order updated successfully with ID: ${orderId}`);
+    const updatedOrder = await updateOrder(orderId, req.body);
+    res.status(200).send({
+      status: 'Success',
+      message: `Order with ID: ${orderId} updated successfully `,
+      order: updatedOrder
+    });
   } catch (error) {
     res.status(500).send(`Error updating order: ${error.message}`);
   }
 });
 
 // Endpoint to add an item to an order based on the product ID and provided weight or number of pieces
-app.post('/orders/:orderId/items/:productId', async (req, res) => {
+app.post('/orders/:orderId/items', async (req, res) => {
   try {
-      const { orderId, productId } = req.params;
+      const { orderId } = req.params;
       const itemData = {
-          productId,
           ...req.body
       };
-      const itemId = await addItemToOrder(orderId, itemData);
-      res.status(201).send(`Item added successfully with ID: ${itemId}`);
+      const item = await addItemToOrder(orderId, itemData);
+      res.status(201).send(
+        {
+          status: 'Success',
+          message: `Item added successfully with ID: ${item.id}`,
+          item: item
+        });
   } catch (error) {
       res.status(500).send(`Error adding item to order: ${error.message}`);
   }

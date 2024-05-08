@@ -5,11 +5,14 @@ const { downloadImageFromGCS } = require('./products');
 async function createOrder(orderData) {
   const orderRef = db.collection('orders').doc(); // creates a new document in the 'orders' collection
   await orderRef.set({
-    total_price: parseFloat(0.0),
+    order_total_price: parseFloat(0.0),
     total_number_of_pieces: parseInt(0),
-    creation_date: new Date().toISOString(),
+    oder_total_weight: parseFloat(0.0),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     ...orderData });
-  return orderRef.id; // returns the new order ID
+    const docSnapshot = await orderRef.get();
+  return {id: orderRef.id, ...docSnapshot.data()}; // returns the new order ID
 }
 
 async function getAllOrders() {
@@ -18,11 +21,9 @@ async function getAllOrders() {
   const orders = [];
 
   for (const doc of snapshot.docs) {
-    await computeOrderGlobals(doc.id);
-    const orderData = { id: doc.id, ...doc.data() };
+    orderData = await getOrderById(doc.id);
     orders.push(orderData);
   }
-
   return orders;
 }
 
@@ -42,7 +43,7 @@ async function getOrderById(orderId) {
       items.push({ id: itemDoc.id, ...itemDoc.data() });
   });
   
-  return { id: doc.id, ...doc.data(), items: items };
+  return { id: doc.id, ...doc.data(), order_items: items };
 }
 
 async function computeOrderGlobals(orderId) {
@@ -71,15 +72,15 @@ async function computeOrderGlobals(orderId) {
 
   // Update the order with the new total price and total number of pieces
   await orderRef.update({
-    total_price: parseFloat(orderTotalPrice.toFixed(2)),
-    total_number_of_pieces: totalNumberOfPieces,  // Update the total number of pieces
-    totalWeight: parseFloat(totalWeight.toFixed(2))
+    order_total_price: parseFloat(orderTotalPrice.toFixed(2)),
+    oder_total_number_pieces: totalNumberOfPieces,  // Update the total number of pieces
+    oder_total_weight: parseFloat(totalWeight.toFixed(2))
   });
 
   return {
-    total_price: orderTotalPrice,
-    total_number_of_pieces: totalNumberOfPieces,
-    totalWeight: totalWeight
+    order_total_price: orderTotalPrice,
+    oder_total_number_pieces: totalNumberOfPieces,
+    oder_total_weight: totalWeight
   };
 }
 
@@ -125,14 +126,15 @@ async function updateOrder(orderId, updatedData) {
   // Update the order with the constructed payload
   await orderRef.update(updatePayload);
   await computeOrderGlobals(orderId);
-  return orderId; // returns the updated order ID
+  const docSnapshot = await orderRef.get()
+  return {id: orderId, ...docSnapshot}; // returns the updated order ID
 }
 
 const deleteOrder = async (req, res) => {
     const orderId = req.params.orderId;
     try {
         await db.collection('orders').doc(orderId).delete();
-        res.status(200).send({ status: 'Success', message: 'Order deleted successfully' });
+        res.status(200).send({ status: 'Success', message: 'Order deleted successfully', id: orderId });
     } catch (error) {
         res.status(500).send({ status: 'Error', message: error.message });
     }
@@ -172,27 +174,27 @@ async function exportOrder(req, res) {
     // worksheet.mergeCells('C1:H1');
     worksheet.getCell('C1').value = "Commande";
     worksheet.getCell('C1').font = { bold: true };
-    worksheet.getCell('D1').value = orderData.orderName;
+    worksheet.getCell('D1').value = orderData.order_name;
 
     // worksheet.mergeCells('C2:H2');
     worksheet.getCell('C2').value = "Client";
     worksheet.getCell('C2').font = { bold: true };
-    worksheet.getCell('D2').value = orderData.customerInfo.name;
+    worksheet.getCell('D2').value = orderData.customer_name;
 
     // worksheet.mergeCells('C3:H3');
     worksheet.getCell('C3').value = "Adresse";
     worksheet.getCell('C3').font = { bold: true };
-    worksheet.getCell('D3').value = orderData.customerInfo.address;
+    worksheet.getCell('D3').value = orderData.customer_address;
 
     // worksheet.mergeCells('C4:H4');
     worksheet.getCell('C4').value = "Numéro de téléphone";
     worksheet.getCell('C4').font = { bold: true };
-    worksheet.getCell('D4').value = orderData.customerInfo.phone;
+    worksheet.getCell('D4').value = orderData.customer_phone;
 
     // worksheet.mergeCells('C5:H5');
     worksheet.getCell('C5').value = "Date de livraison";
     worksheet.getCell('C5').font = { bold: true };
-    worksheet.getCell('D5').value = orderData.weddingInfo.deliveryDate;
+    worksheet.getCell('D5').value = orderData.wedding_date;
 
     // Define columns for items table starting from a specific row
     worksheet.columns = [
@@ -218,15 +220,15 @@ async function exportOrder(req, res) {
       const item = doc.data();
       const row = worksheet.getRow(rowIndex);
       row.getCell(2).value = item.product_name;
-      row.getCell(3).value = parseInt(item.number_of_pieces);
-      row.getCell(4).value = parseInt(item.pieces_per_kilo);
-      row.getCell(5).value = item.price;
-      row.getCell(6).value = item.weight;
-      row.getCell(7).value = item.total_price;
+      row.getCell(3).value = parseInt(item.total_number_pieces);
+      row.getCell(4).value = parseInt(item.product_piece_per_kilo);
+      row.getCell(5).value = item.total_price;
+      row.getCell(6).value = item.total_weight;
+      row.getCell(7).value = item.total_number_pieces;
 
       // Download and embed item image
-      if (item.picture_url) {
-        const imageBuffer = await downloadImageFromGCS(item.picture_url);
+      if (item.product_image_url) {
+        const imageBuffer = await downloadImageFromGCS(item.product_image_url);
         const imageId = workbook.addImage({
           buffer: imageBuffer,
           extension: 'jpeg',

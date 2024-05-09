@@ -33,7 +33,6 @@ async function getOrderById(orderId) {
   if (!doc.exists) {
     throw new Error('No order found with the given ID.');
   }
-  await computeOrderGlobals(orderId);
   // Fetch the items within this order
   const itemsCollection = orderRef.collection('items');
   const itemsSnapshot = await itemsCollection.get();

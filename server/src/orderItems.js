@@ -68,7 +68,7 @@ async function addItemToOrder(orderId, itemData) {
         const orderDoc = await transaction.get(orderRef);
         const itemsSnapshot = await transaction.get(itemsRef);
         const orderData = orderDoc.data();
-        const orderItems = []
+        const orderItems = [];
         let newTotalPrice = 0;
         let newTotalWeight = 0.0;
         let newNbPieces = 0;
@@ -171,11 +171,54 @@ async function updateItemInOrder(orderId, itemId, updateData) {
 
 // Delete an item from an order
 async function deleteItemFromOrder(orderId, itemId) {
-    const itemRef = db.collection('orders').doc(orderId).collection('items').doc(itemId);
-    await itemRef.delete();
-    // await computeOrderGlobals(orderId);
-    const updatedOrder = await getOrderById(orderId);
+    const orderRef = db.collection('orders').doc(orderId);
+    const itemsRef = orderRef.collection('items');
 
+    // Start a transaction to ensure data consistency
+    const updatedOrder = await db.runTransaction(async (transaction) => {
+        // 1. Retrieve all items except the one to be deleted
+        const itemsSnapshot = await transaction.get(itemsRef);
+        const orderItems = [];
+        let newTotalPrice = 0;
+        let newTotalWeight = 0.0;
+        let newNbPieces = 0;
+
+        itemsSnapshot.forEach(doc => {
+            if (doc.id !== itemId){
+                newTotalPrice += doc.data().total_price;
+                newTotalWeight += doc.data().total_weight;
+                newNbPieces += doc.data().total_number_pieces;
+                orderItems.push({ id: doc.id, ...doc.data() })
+            }
+        });
+        // 3. Retrieve the current order document
+        const orderDoc = await transaction.get(orderRef);
+        if (!orderDoc.exists) {
+            throw new Error("Order not found");
+        }
+        const orderData = orderDoc.data();
+
+        // 2. Delete the item document
+        const itemRef = itemsRef.doc(itemId);
+        transaction.delete(itemRef);
+
+        // 4. Update the total price in the order document
+        const updatedOrder = {
+            ...orderData,
+            total_price: newTotalPrice,
+            order_total_price: newTotalPrice,
+            order_total_weight: newTotalWeight,
+            order_total_number_pieces: newNbPieces,
+            order_items: orderItems
+        };
+        transaction.update(orderRef, {
+            order_total_price: newTotalPrice,
+            order_total_weight: newTotalWeight,
+            order_total_number_pieces: newNbPieces
+        });
+
+        return updatedOrder;
+    });
     return {itemId: itemId, updatedOrder: updatedOrder}
 }
 

@@ -35,7 +35,7 @@ const processImage = async (req, res) => {
   try {
     // Process the image and generate a buffer
     const imageBuffer = await sharp(req.file.buffer)
-      .resize(640, null) // Resize width to 640px and adjust height to maintain aspect ratio
+      .resize(120, null) // Resize width to 640px and adjust height to maintain aspect ratio
       .toBuffer();
 
     const productRef = db.collection('products').doc(productId);
@@ -59,7 +59,14 @@ const processImage = async (req, res) => {
     // Update Firestore with the new image URL
     await productRef.update({ product_image_url: url });
 
-    res.status(200).send({ message: 'Image uploaded successfully', url , id: productId});
+    const productsRef = db.collection('products');
+    const snapshot = await productsRef.get();
+    const products = [];
+    snapshot.forEach(doc => {
+        products.push({ id: doc.id, ...doc.data() });
+    });
+
+    res.status(200).send({ message: 'Image uploaded successfully', url , products: products});
   } catch (error) {
     res.status(500).send({ message: 'Failed to upload image to Google Cloud Storage', error: error.message });
   }

@@ -6,8 +6,8 @@ async function createOrder(orderData) {
   const orderRef = db.collection('orders').doc(); // creates a new document in the 'orders' collection
   await orderRef.set({
     order_total_price: parseFloat(0.0),
-    total_number_of_pieces: parseInt(0),
-    oder_total_weight: parseFloat(0.0),
+    order_total_number_pieces: parseInt(0),
+    order_total_weight: parseFloat(0.0),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...orderData });
@@ -29,11 +29,11 @@ async function getAllOrders() {
 
 async function getOrderById(orderId) {
   const orderRef = db.collection('orders').doc(orderId);
-  await computeOrderGlobals(orderId);
   const doc = await orderRef.get();
   if (!doc.exists) {
     throw new Error('No order found with the given ID.');
   }
+  await computeOrderGlobals(orderId);
   // Fetch the items within this order
   const itemsCollection = orderRef.collection('items');
   const itemsSnapshot = await itemsCollection.get();
@@ -57,7 +57,7 @@ async function computeOrderGlobals(orderId) {
   let totalNumberOfPieces = 0;  // Initialize total number of pieces
   let totalWeight = 0.0;
 
-  itemsSnapshot.forEach(doc => {
+  await itemsSnapshot.forEach(doc => {
     const itemData = doc.data();
     if (itemData.total_price) {
       orderTotalPrice += parseFloat(itemData.total_price);
@@ -73,14 +73,14 @@ async function computeOrderGlobals(orderId) {
   // Update the order with the new total price and total number of pieces
   await orderRef.update({
     order_total_price: parseFloat(orderTotalPrice.toFixed(2)),
-    oder_total_number_pieces: totalNumberOfPieces,  // Update the total number of pieces
-    oder_total_weight: parseFloat(totalWeight.toFixed(2))
+    order_total_number_pieces: totalNumberOfPieces,  // Update the total number of pieces
+    order_total_weight: parseFloat(totalWeight.toFixed(2))
   });
 
   return {
     order_total_price: orderTotalPrice,
     oder_total_number_pieces: totalNumberOfPieces,
-    oder_total_weight: totalWeight
+    order_total_weight: totalWeight
   };
 }
 
@@ -246,12 +246,12 @@ async function exportOrder(req, res) {
     const totalWeight = rowIndex + 2;
     worksheet.getCell(`B${totalWeight}`).value = `Poid Total:`;
     worksheet.getCell(`B${totalWeight}`).font = { bold: true };
-    worksheet.getCell(`C${totalWeight}`).value = orderData.total_number_of_pieces;
+    worksheet.getCell(`C${totalWeight}`).value = orderData.order_total_number_pieces;
 
     const totalPieces = rowIndex + 3;
     worksheet.getCell(`B${totalPieces}`).value = `Nombre de pièces total:`;
     worksheet.getCell(`B${totalPieces}`).font = { bold: true };
-    worksheet.getCell(`C${totalPieces}`).value = orderData.total_number_of_pieces;
+    worksheet.getCell(`C${totalPieces}`).value = orderData.order_total_number_pieces;
 
     // Add Order Total Price at the end
     const totalPriceRow = rowIndex + 4;

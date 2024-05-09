@@ -184,12 +184,12 @@ app.post('/orders/:orderId/items', async (req, res) => {
       const itemData = {
           ...req.body
       };
-      const item = await addItemToOrder(orderId, itemData);
+      const {updatedOrder, itemId} = await addItemToOrder(orderId, itemData);
       res.status(201).send(
         {
           status: 'Success',
-          message: `Item added successfully with ID: ${item.id}`,
-          item: item
+          message: `Item added successfully with ID: ${itemId}`,
+          order: updatedOrder
         });
   } catch (error) {
       res.status(500).send(`Error adding item to order: ${error.message}`);
@@ -202,8 +202,8 @@ app.patch('/orders/:orderId/items/:itemId', async (req, res) => {
   const { orderId, itemId } = req.params;
   const updateData = req.body;
   try {
-      await updateItemInOrder(orderId, itemId, updateData);
-      res.status(200).send({ message: 'Item updated successfully' });
+      const { updatedOrder } = await updateItemInOrder(orderId, itemId, updateData);
+      res.status(200).send({ status:"Success", message: 'Item updated successfully', order: updatedOrder });
   } catch (error) {
       res.status(400).send({ error: error.message });
   }
@@ -235,8 +235,12 @@ app.get('/orders/:orderId/items/:itemId?', async (req, res) => {
 // Endpoint to delete an item from an order
 app.delete('/orders/:orderId/items/:itemId', async (req, res) => {
     try {
-        const itemId = await deleteItemFromOrder(req.params.orderId, req.params.itemId);
-        res.status(200).send(`Item deleted successfully with ID: ${itemId}`);
+        const {updatedOrder, itemId} = await deleteItemFromOrder(req.params.orderId, req.params.itemId);
+        res.status(200).send({
+          status: "Success",
+          message: `Item deleted successfully with ID: ${itemId}`,
+          order: updatedOrder
+        });
     } catch (error) {
         res.status(500).send(`Error deleting item from order: ${error.message}`);
     }

@@ -1,5 +1,5 @@
 const db = require('./firestore');
-const { computeOrderGlobals } = require('./order');
+const { computeOrderGlobals, getOrderById } = require('./order');
 
 // Fetch product details using the productId
 async function fetchProductDetails(productId) {
@@ -74,11 +74,10 @@ async function addItemToOrder(orderId, itemData) {
     }
 
     await itemRef.set(itemData);
+    // await computeOrderGlobals(orderId);
+    const updatedOrder = await getOrderById(orderId);
 
-    // Update the order total price
-    await computeOrderGlobals(orderId);
-
-    return {id: itemRef.id, ...itemData};
+    return {itemId: itemRef.id, updatedOrder: updatedOrder};
 }
 
 // Update an item in an order
@@ -132,7 +131,10 @@ async function updateItemInOrder(orderId, itemId, updateData) {
         console.log('Item updated successfully:', itemId);
 
         // Update the order total price
-        await computeOrderGlobals(orderId);
+        // await computeOrderGlobals(orderId);
+        const updatedOrder = await getOrderById(orderId);
+
+        return {itemId: itemRef.id, updatedOrder: updatedOrder};
         
     } catch (error) {
         console.error('Failed to update item:', error);
@@ -144,8 +146,10 @@ async function updateItemInOrder(orderId, itemId, updateData) {
 async function deleteItemFromOrder(orderId, itemId) {
     const itemRef = db.collection('orders').doc(orderId).collection('items').doc(itemId);
     await itemRef.delete();
-    await computeOrderGlobals(orderId);
-    return itemId;
+    // await computeOrderGlobals(orderId);
+    const updatedOrder = await getOrderById(orderId);
+
+    return {itemId: itemId, updatedOrder: updatedOrder}
 }
 
 module.exports = {

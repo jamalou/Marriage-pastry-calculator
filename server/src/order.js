@@ -163,7 +163,6 @@ async function exportOrder(req, res) {
     // Fetch order details from Firestore
     const orderId = req.params.orderId; // Get the order ID from URL or request body
     // compute the order price to be sure that it is up to date
-    await computeOrderGlobals(orderId);
     const orderRef = db.collection('orders').doc(orderId);
     const orderDoc = await orderRef.get();
     const orderData = orderDoc.data();

@@ -57,7 +57,7 @@ const processImage = async (req, res) => {
     const url = `https://storage.cloud.google.com/${bucket.name}/${filePath}`;
 
     // Update Firestore with the new image URL
-    await productRef.update({ picture_url: url });
+    await productRef.update({ product_image_url: url });
 
     res.status(200).send({ message: 'Image uploaded successfully', url , id: productId});
   } catch (error) {

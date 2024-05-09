@@ -204,6 +204,7 @@ async function deleteItemFromOrder(orderId, itemId) {
 
         // 4. Update the total price in the order document
         const updatedOrder = {
+            id: orderId,
             ...orderData,
             total_price: newTotalPrice,
             order_total_price: newTotalPrice,

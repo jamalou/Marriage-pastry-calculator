@@ -226,17 +226,21 @@ async function exportOrder(req, res) {
 
       // Download and embed item image
       if (item.product_image_url) {
-        const imageBuffer = await downloadImageFromGCS(item.product_image_url);
-        const imageId = workbook.addImage({
-          buffer: imageBuffer,
-          extension: 'jpeg',
-        });
-        worksheet.addImage(imageId, {
-          tl: { col: 0.9, row: rowIndex - 1 + 0.5},
-          ext: { width: 50, height: 50 }
-        });
-        worksheet.getRow(row.number).height = 50*1.2;
-      }
+        try {
+          const imageBuffer = await downloadImageFromGCS(item.product_image_url);
+          const imageId = workbook.addImage({
+            buffer: imageBuffer,
+            extension: 'jpeg',
+          });
+          worksheet.addImage(imageId, {
+            tl: { col: 0.9, row: rowIndex - 1 + 0.5},
+            ext: { width: 50, height: 50 }
+          });
+          worksheet.getRow(row.number).height = 50*1.2;
+        } catch (error) {
+          console.error('Failed to download image:', error);
+        }
+      } 
 
       rowIndex++;
     }
@@ -244,7 +248,7 @@ async function exportOrder(req, res) {
     const totalWeight = rowIndex + 2;
     worksheet.getCell(`B${totalWeight}`).value = `Poid Total:`;
     worksheet.getCell(`B${totalWeight}`).font = { bold: true };
-    worksheet.getCell(`C${totalWeight}`).value = orderData.order_total_number_pieces;
+    worksheet.getCell(`C${totalWeight}`).value = orderData.order_total_weight;
 
     const totalPieces = rowIndex + 3;
     worksheet.getCell(`B${totalPieces}`).value = `Nombre de pièces total:`;
@@ -255,7 +259,7 @@ async function exportOrder(req, res) {
     const totalPriceRow = rowIndex + 4;
     worksheet.getCell(`B${totalPriceRow}`).value = `Prix total de la commande:`;
     worksheet.getCell(`B${totalPriceRow}`).font = { bold: true };
-    worksheet.getCell(`C${totalPriceRow}`).value = orderData.total_price;
+    worksheet.getCell(`C${totalPriceRow}`).value = orderData.order_total_price;
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="order_items.xlsx"');

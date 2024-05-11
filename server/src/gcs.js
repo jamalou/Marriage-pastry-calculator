@@ -3,7 +3,7 @@ const { Storage } = require('@google-cloud/storage');
 
 const storage = new Storage();
 
-bucketName = 'demo_mohamed_jamel';
+bucketName = 'wedding_calculator_tool_bucket';
 const bucket = storage.bucket(bucketName);
 
 async function uploadFileToGCS(file) {

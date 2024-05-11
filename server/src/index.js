@@ -30,7 +30,19 @@ const upload = multer({
 });
 
 app.use(bodyParser.json());
+
+// CORS Configuration
+// const corsOptions = {
+//   origin: 'https://nabliya-commande-mariage.web.app', // Allow your frontend domain
+//   optionsSuccessStatus: 200 // For legacy browser support
+// };
+
+// app.use(bodyParser.json());
+
+// app.use(cors(corsOptions));
+
 app.use(cors());
+
 
 // asdfasfa
 
@@ -82,9 +94,13 @@ app.post('/products/csv', upload.single('file'), async (req, res) => {
   }
   try {
     const filePath = await uploadFileToGCS(req.file);
-    const numImported = await importProducts(filePath);
+    const importedProducts = await importProducts(filePath);
     
-    res.status(200).send(`${numImported} products imported successfully.`);
+    res.status(200).send({
+      status: "Success",
+      message: `${importedProducts.length} products imported successfully.`,
+      products: importedProducts
+    })
   } catch (error) {
     res.status(500).send('Failed to import products: ' + error.message);
   }

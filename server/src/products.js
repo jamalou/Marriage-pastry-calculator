@@ -1,14 +1,20 @@
 const db = require('./firestore');
 const { Storage } = require('@google-cloud/storage');
 const csv = require('csv-parser');
-const fs = require('fs');
-const path = require('path');
 const Excel = require('exceljs');
-const axios = require('axios');
 
 
 const storage = new Storage();
 
+async function getAllProducts() {
+  const productsRef = db.collection('products');
+  const snapshot = await productsRef.get();
+  const products = [];
+  snapshot.forEach(doc => {
+      products.push({ id: doc.id, ...doc.data() });
+  });
+  return products
+}
 async function clearCollection(collectionPath) {
   const dbRef = db.collection(collectionPath);
   const batchSize = 200; // Firestore limit is 500 operations in a batch
@@ -53,7 +59,6 @@ async function importProducts(fileUrl) {
   const file = bucket.file(fileName);
 
   try {
-    
     return new Promise(async (resolve, reject) => {
 
       // First clear the existing products
@@ -72,7 +77,7 @@ async function importProducts(fileUrl) {
               batch.set(docRef, product);
             });
             await batch.commit();
-            resolve(products.length);
+            resolve(await getAllProducts());
           } catch (error) {
             reject(error);
           }
@@ -88,7 +93,7 @@ const addProduct = async (req, res) => {
   try {
       // Add a new document with a generated ID
       const docRef = await db.collection('products').add(newProduct);
-      res.status(201).send({ status: 'Success', message: 'Product added successfully', id: docRef.id });
+      res.status(201).send({ status: 'Success', message: 'Product added successfully', product: {id: docRef.id, ...newProduct} });
   } catch (error) {
       res.status(500).send({ status: 'Error', message: error.message });
   }
@@ -96,13 +101,8 @@ const addProduct = async (req, res) => {
 
 const listProducts = async (req, res) => {
     try {
-        const productsRef = db.collection('products');
-        const snapshot = await productsRef.get();
-        const products = [];
-        snapshot.forEach(doc => {
-            products.push({ id: doc.id, ...doc.data() });
-        });
-        res.status(200).send(products);
+        const productsList = await getAllProducts()
+        res.status(200).send(productsList);
     } catch (error) {
         res.status(500).send({ status: 'Error', message: error.message });
     }
